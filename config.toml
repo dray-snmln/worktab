@@ -1,0 +1,226 @@
+# Worktab feed settings. This is the only file you normally edit.
+# Changes go live on the next run (or push, which triggers a run).
+
+[ranking]
+max_age_days = 7          # older items are dropped
+max_items = 120           # page size
+max_per_source = 8        # stops one busy source flooding the page
+act_at = 7                # score needed for "Act on this"
+read_at = 3               # score needed for "Worth reading"; below = "FYI"
+drop_below = -5           # hide anything scoring lower than this
+age_penalty_per_day = 1.0
+summary_match_factor = 0.5   # keyword in summary counts half as much as in title
+activity_factor = 1.5        # boost for points/comments (log scale)
+activity_cap = 4
+
+# Keyword weights. Matched in title (full weight) or summary (half).
+# Negative numbers push things down. Case doesn't matter.
+[keywords]
+"Bricks" = 6
+"Bricks Builder" = 2
+"WordPress" = 3
+"Gutenberg" = 2
+"ACF" = 3
+"Advanced Custom Fields" = 3
+"WooCommerce" = 1
+"CSS" = 2
+"container queries" = 2
+"view transitions" = 2
+"Baseline" = 1.5
+"accessibility" = 2
+"WCAG" = 2
+"Core Web Vitals" = 3
+"performance" = 1
+"SEO" = 1.5
+"Google Search" = 2
+"Figma" = 1.5
+"design system" = 2
+"typography" = 1
+"UX" = 1
+"Claude" = 2
+"Anthropic" = 2
+"MCP" = 2
+"vulnerability" = 3
+"security release" = 5
+"security" = 1.5
+"PHP" = 1
+"crypto" = -10
+"NFT" = -10
+"hiring" = -4
+"for hire" = -8
+
+# Optional AI pass. Runs only when the provider's key is set as a repo
+# secret (ANTHROPIC_API_KEY for anthropic). Without it, nothing changes.
+[ai]
+enabled = true
+provider = "anthropic"
+model = "claude-haiku-5-5"
+max_items = 40            # only the top items are sent, titles + short summaries
+weight = 1.0              # how strongly the AI score moves the rule score
+about = """
+Solo web developer building client sites in WordPress + Bricks Builder.
+Cares about: Bricks and WordPress changes that affect builds, CSS and
+layout techniques, accessibility, performance, SEO changes, UI/UX and
+design systems, and AI tools for web work (Claude, MCP).
+Not interested in: crypto, generic startup news, job posts.
+"""
+
+# ---------------------------------------------------------------- sources
+# type: rss | hn | reddit       weight: added to every item's score
+# group: used for the page filters      tier = "act" pins a source to the top
+# enabled = false switches a source off without deleting it
+
+[[sources]]
+name = "Bricks releases"
+type = "rss"
+url = "https://bricksbuilder.io/feed/?post_type=release"
+group = "Bricks"
+weight = 6
+tier = "act"
+
+[[sources]]
+name = "Bricks forum"
+type = "rss"
+url = "https://forum.bricksbuilder.io/latest.rss"
+group = "Bricks"
+weight = 1
+
+[[sources]]
+name = "WordPress News"
+type = "rss"
+url = "https://wordpress.org/news/feed/"
+group = "WordPress"
+weight = 3
+
+[[sources]]
+name = "Make WordPress Core"
+type = "rss"
+url = "https://make.wordpress.org/core/feed/"
+group = "WordPress"
+weight = 1
+
+[[sources]]
+name = "ACF blog"
+type = "rss"
+url = "https://www.advancedcustomfields.com/blog/feed/"
+group = "WordPress"
+weight = 1
+
+[[sources]]
+name = "Smashing Magazine"
+type = "rss"
+url = "https://www.smashingmagazine.com/feed/"
+group = "Web"
+weight = 2
+
+[[sources]]
+name = "Frontend Focus"
+type = "rss"
+url = "https://frontendfoc.us/rss"
+group = "Web"
+weight = 2
+
+[[sources]]
+name = "Chrome for Developers"
+type = "rss"
+url = "https://developer.chrome.com/static/blog/feed.xml"
+group = "Web"
+weight = 1
+
+[[sources]]
+name = "web.dev"
+type = "rss"
+url = "https://web.dev/feed.xml"
+group = "Web"
+weight = 1
+
+[[sources]]
+name = "WebKit"
+type = "rss"
+url = "https://webkit.org/feed/"
+group = "Web"
+weight = 1
+
+[[sources]]
+name = "Nielsen Norman Group"
+type = "rss"
+url = "https://www.nngroup.com/feed/rss/"
+group = "Design"
+weight = 2
+
+[[sources]]
+name = "UX Collective"
+type = "rss"
+url = "https://uxdesign.cc/feed"
+group = "Design"
+weight = 0
+
+[[sources]]
+name = "Google Search Central"
+type = "rss"
+url = "https://feeds.feedburner.com/blogspot/amDG"
+group = "SEO"
+weight = 3
+
+[[sources]]
+name = "Simon Willison"
+type = "rss"
+url = "https://simonwillison.net/atom/everything/"
+group = "AI"
+weight = 0
+
+[[sources]]
+name = "HN: WordPress"
+type = "hn"
+query = "WordPress"
+min_points = 30
+group = "WordPress"
+
+[[sources]]
+name = "HN: CSS"
+type = "hn"
+query = "CSS"
+min_points = 80
+group = "Web"
+
+[[sources]]
+name = "HN: Anthropic"
+type = "hn"
+query = "Anthropic"
+min_points = 150
+group = "AI"
+
+# Reddit blocks anonymous requests from GitHub's servers. To turn these on,
+# add REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET repo secrets (see README),
+# then set enabled = true.
+[[sources]]
+name = "r/webdev"
+type = "reddit"
+subreddit = "webdev"
+min_points = 50
+group = "Web"
+enabled = false
+
+[[sources]]
+name = "r/ProWordPress"
+type = "reddit"
+subreddit = "ProWordPress"
+period = "week"
+group = "WordPress"
+enabled = false
+
+[[sources]]
+name = "r/BricksBuilder"
+type = "reddit"
+subreddit = "BricksBuilder"
+period = "week"
+group = "Bricks"
+enabled = false
+
+[[sources]]
+name = "r/web_design"
+type = "reddit"
+subreddit = "web_design"
+min_points = 30
+group = "Design"
+enabled = false

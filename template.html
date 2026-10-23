@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Worktab</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧱</text></svg>">
+<style>
+:root {
+  --paper: #eceff1;
+  --ink: #18212a;
+  --muted: #5b6772;
+  --rule: #cdd3d8;
+  --act: #a8480c;
+  --act-wash: #f6e6d9;
+  --focus: #1f5fbf;
+  --font: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #141a1f;
+    --ink: #e3e8ec;
+    --muted: #93a0ab;
+    --rule: #2c353d;
+    --act: #f0954f;
+    --act-wash: #2b2018;
+    --focus: #7fb0ff;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.5 var(--font); }
+a { color: inherit; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.layout {
+  display: grid; grid-template-columns: 13rem minmax(0, 46rem);
+  gap: 3rem; max-width: 66rem; margin: 0 auto; padding: 3rem 1.5rem 5rem;
+}
+.rail { position: sticky; top: 2rem; align-self: start; }
+.rail h2 { font-size: .875rem; font-weight: 600; color: var(--muted); margin: 1.75rem 0 .5rem; }
+.rail ul { list-style: none; margin: 0; padding: 0; }
+.rail button { display: flex; justify-content: space-between; width: 100%; padding: .3rem .5rem; margin-left: -.5rem; border-radius: 4px; }
+.rail button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.rail .count { color: inherit; opacity: .6; font-variant-numeric: tabular-nums; }
+
+.today { font-size: clamp(2.25rem, 5vw, 3.25rem); font-weight: 700; line-height: 1.05; letter-spacing: -.02em; margin: 0; }
+.tally { color: var(--muted); margin: .5rem 0 2.5rem; }
+
+section { margin-bottom: 2.5rem; }
+section > h2 { font-size: 1.125rem; margin: 0 0 .25rem; padding-bottom: .5rem; border-bottom: 2px solid var(--ink); }
+section.act > h2 { border-color: var(--act); color: var(--act); }
+.items { list-style: none; margin: 0; padding: 0; }
+.item { padding: .9rem 0; border-bottom: 1px solid var(--rule); }
+section.act .item { padding-left: .75rem; border-left: 3px solid var(--act); background: var(--act-wash); border-bottom-color: var(--paper); }
+.item h3 { font-size: 1.0625rem; font-weight: 600; line-height: 1.35; margin: 0; }
+.item h3 a { text-decoration: none; }
+.item h3 a:hover { text-decoration: underline; }
+.item .new { font-size: .75rem; font-weight: 700; color: var(--act); margin-right: .4rem; }
+.item p { margin: .25rem 0 0; color: var(--muted); font-size: .9375rem; max-width: 70ch;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.item .why { color: var(--ink); }
+.meta { display: flex; flex-wrap: wrap; gap: .25rem 1rem; margin-top: .4rem; font-size: .8125rem; color: var(--muted); }
+.meta button { text-decoration: underline; text-underline-offset: 2px; }
+.meta button:hover { color: var(--ink); }
+
+.empty, .footnote { color: var(--muted); }
+.footnote { font-size: .8125rem; border-top: 1px solid var(--rule); padding-top: 1rem; }
+
+@media (max-width: 760px) {
+  .layout { grid-template-columns: 1fr; gap: 1.5rem; padding-top: 1.5rem; }
+  .rail { position: static; }
+  .rail ul { display: flex; flex-wrap: wrap; gap: .25rem .75rem; }
+  .rail button { width: auto; gap: .4rem; margin: 0; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="rail" aria-label="Filters">
+    <h2>View</h2>
+    <ul id="views"></ul>
+    <h2>Topics</h2>
+    <ul id="groups"></ul>
+  </nav>
+  <main>
+    <h1 class="today" id="today"></h1>
+    <p class="tally" id="tally"></p>
+    <div id="feed"></div>
+    <p class="footnote" id="footnote"></p>
+  </main>
+</div>
+
+<script>
+const DATA = /*__FEED_DATA__*/null;
+
+const TIERS = [
+  { key: "act", label: "Act on this" },
+  { key: "read", label: "Worth reading" },
+  { key: "fyi", label: "FYI" },
+];
+const HOUR = 3600e3;
+
+/* ---------- storage: browser-only, wrapped so a blocked store never breaks the page */
+const store = {
+  get(key, fallback) {
+    try { return JSON.parse(localStorage.getItem("worktab:" + key)) ?? fallback; }
+    catch { return fallback; }
+  },
+  set(key, value) {
+    try { localStorage.setItem("worktab:" + key, JSON.stringify(value)); } catch {}
+  },
+};
+
+const saved = store.get("saved", {});    // id -> item snapshot (survives the 7-day window)
+const hidden = store.get("hidden", {});  // id -> true
+const state = { view: "feed", group: "All" };
+
+// "New" = published since your previous visit. A visit ends after an hour away,
+// so reloading the page doesn't clear the markers.
+const visit = store.get("visit", { anchor: 0, last: 0 });
+if (Date.now() - visit.last > HOUR) visit.anchor = visit.last;
+visit.last = Date.now();
+store.set("visit", visit);
+
+// Drop hidden ids that have aged out of the feed so storage stays small
+const liveIds = new Set(DATA.items.map(i => i.id));
+for (const id of Object.keys(hidden)) if (!liveIds.has(id)) delete hidden[id];
+store.set("hidden", hidden);
+
+/* ---------- helpers */
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") node.className = v;
+    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v);
+  }
+  node.append(...children.filter(c => c != null && c !== ""));
+  return node;
+}
+
+function ago(iso) {
+  if (!iso) return "";
+  const hours = (Date.now() - Date.parse(iso)) / HOUR;
+  if (hours < 1) return "just now";
+  if (hours < 24) return `${Math.floor(hours)}h ago`;
+  const days = Math.floor(hours / 24);
+  return days === 1 ? "yesterday" : `${days} days ago`;
+}
+
+const isNew = item => visit.anchor && item.published && Date.parse(item.published) > visit.anchor;
+
+/* ---------- actions */
+function toggleSave(item) {
+  if (saved[item.id]) delete saved[item.id]; else saved[item.id] = item;
+  store.set("saved", saved);
+  render();
+}
+function toggleHide(item) {
+  if (hidden[item.id]) delete hidden[item.id]; else hidden[item.id] = true;
+  store.set("hidden", hidden);
+  render();
+}
+
+/* ---------- rendering */
+function visibleItems() {
+  let list;
+  if (state.view === "saved") list = Object.values(saved);
+  else if (state.view === "hidden") list = DATA.items.filter(i => hidden[i.id]);
+  else list = DATA.items.filter(i => !hidden[i.id]);
+  return state.group === "All" ? list : list.filter(i => i.group === state.group);
+}
+
+function itemRow(item) {
+  const activity = [
+    item.points != null ? `${item.points} points` : "",
+    item.comments != null ? `${item.comments} comments` : "",
+  ].filter(Boolean).join(", ");
+
+  return el("li", { class: "item" },
+    el("h3", {},
+      isNew(item) ? el("span", { class: "new" }, "New") : null,
+      el("a", { href: item.url, target: "_blank", rel: "noopener" }, item.title)),
+    item.why ? el("p", { class: "why" }, item.why) : null,
+    item.summary && !item.why ? el("p", {}, item.summary) : null,
+    el("div", { class: "meta" },
+      el("span", {}, item.source),
+      item.published ? el("span", {}, ago(item.published)) : null,
+      activity && item.discussion_url
+        ? el("a", { href: item.discussion_url, target: "_blank", rel: "noopener" }, activity)
+        : null,
+      item.matches?.length ? el("span", {}, "Matched " + item.matches.join(", ")) : null,
+      el("button", { onclick: () => toggleSave(item) }, saved[item.id] ? "Unsave" : "Save"),
+      el("button", { onclick: () => toggleHide(item) }, hidden[item.id] ? "Unhide" : "Hide")));
+}
+
+function filterButton(label, count, pressed, onclick) {
+  return el("li", {}, el("button", { "aria-pressed": String(pressed), onclick },
+    el("span", {}, label), el("span", { class: "count" }, String(count))));
+}
+
+function renderRail() {
+  const views = [
+    ["feed", "Feed", DATA.items.filter(i => !hidden[i.id]).length],
+    ["saved", "Saved", Object.keys(saved).length],
+    ["hidden", "Hidden", Object.keys(hidden).length],
+  ];
+  document.getElementById("views").replaceChildren(...views.map(([key, label, n]) =>
+    filterButton(label, n, state.view === key, () => { state.view = key; render(); })));
+
+  const counts = {};
+  for (const i of DATA.items) if (!hidden[i.id]) counts[i.group] = (counts[i.group] || 0) + 1;
+  const groups = [["All", Object.values(counts).reduce((a, b) => a + b, 0)],
+                  ...Object.entries(counts).sort()];
+  document.getElementById("groups").replaceChildren(...groups.map(([g, n]) =>
+    filterButton(g, n, state.group === g, () => { state.group = g; render(); })));
+}
+
+function renderFeed() {
+  const items = visibleItems();
+  const feed = document.getElementById("feed");
+  if (!items.length) {
+    const msg = { saved: "Nothing saved yet. Use Save on any item to keep it here.",
+                  hidden: "Nothing hidden." }[state.view] || "No items match this topic.";
+    feed.replaceChildren(el("p", { class: "empty" }, msg));
+    return;
+  }
+  if (state.view !== "feed") {
+    feed.replaceChildren(el("ul", { class: "items" }, ...items.map(itemRow)));
+    return;
+  }
+  feed.replaceChildren(...TIERS.map(tier => {
+    const rows = items.filter(i => i.tier === tier.key);
+    if (!rows.length) return null;
+    return el("section", { class: tier.key, "aria-label": tier.label },
+      el("h2", {}, `${tier.label} (${rows.length})`),
+      el("ul", { class: "items" }, ...rows.map(itemRow)));
+  }).filter(Boolean));
+}
+
+function renderHeader() {
+  document.getElementById("today").textContent =
+    new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+  const live = DATA.items.filter(i => !hidden[i.id]);
+  const fresh = live.filter(isNew).length;
+  const act = live.filter(i => i.tier === "act").length;
+  document.getElementById("tally").textContent =
+    `${act} to act on, ${fresh} new since your last visit, ${live.length} in total.`;
+
+  const built = new Date(DATA.builtAt).toLocaleString(undefined,
+    { weekday: "short", hour: "numeric", minute: "2-digit" });
+  const failed = DATA.errors.map(e => e.source);
+  document.getElementById("footnote").textContent =
+    `Updated ${built}. ${DATA.aiUsed ? "Ranked with AI." : "Ranked by keyword rules."}` +
+    (failed.length ? ` Couldn't reach: ${failed.join(", ")}.` : "");
+}
+
+function render() { renderRail(); renderFeed(); renderHeader(); }
+render();
+</script>
+</body>
+</html>
